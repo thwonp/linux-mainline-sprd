@@ -83,8 +83,13 @@ static void musb_ep_program(struct musb *musb, u8 epnum,
 
 /*
  * Clear TX fifo. Needed to avoid BABBLE errors.
+ *
+ * @gone: the device is no longer attached. Its FIFO cannot drain then, and
+ * the callers hold musb->lock with interrupts off, so waiting out the retries
+ * cost a second of masked IRQs per URB - unplugging a USB DAC mid-stream
+ * froze display, GPU and audio for ~10 s. Ask for one flush and move on.
  */
-static void musb_h_tx_flush_fifo(struct musb_hw_ep *ep)
+static void musb_h_tx_flush_fifo(struct musb_hw_ep *ep, bool gone)
 {
 	struct musb	*musb = ep->musb;
 	void __iomem	*epio = ep->regs;
@@ -96,6 +101,8 @@ static void musb_h_tx_flush_fifo(struct musb_hw_ep *ep)
 		csr |= MUSB_TXCSR_FLUSHFIFO | MUSB_TXCSR_TXPKTRDY;
 		musb_writew(epio, MUSB_TXCSR, csr);
 		csr = musb_readw(epio, MUSB_TXCSR);
+		if (gone)
+			return;
 
 		/*
 		 * FIXME: sometimes the tx fifo flush failed, it has been
@@ -527,7 +534,7 @@ musb_rx_reinit(struct musb *musb, struct musb_qh *qh, u8 epnum)
 	if (ep->is_shared_fifo) {
 		csr = musb_readw(ep->regs, MUSB_TXCSR);
 		if (csr & MUSB_TXCSR_MODE) {
-			musb_h_tx_flush_fifo(ep);
+			musb_h_tx_flush_fifo(ep, false);
 			csr = musb_readw(ep->regs, MUSB_TXCSR);
 			musb_writew(ep->regs, MUSB_TXCSR,
 				    csr | MUSB_TXCSR_FRCDATATOG);
@@ -740,7 +747,7 @@ static void musb_ep_program(struct musb *musb, u8 epnum,
 			 * case
 			 */
 			if (!hw_ep->tx_double_buffered)
-				musb_h_tx_flush_fifo(hw_ep);
+				musb_h_tx_flush_fifo(hw_ep, false);
 
 			/*
 			 * We must not clear the DMAMODE bit before or in
@@ -1273,7 +1280,7 @@ done:
 		/* do the proper sequence to abort the transfer in the
 		 * usb core; the dma engine should already be stopped.
 		 */
-		musb_h_tx_flush_fifo(hw_ep);
+		musb_h_tx_flush_fifo(hw_ep, false);
 		tx_csr &= ~(MUSB_TXCSR_AUTOSET
 				| MUSB_TXCSR_DMAENAB
 				| MUSB_TXCSR_H_ERROR
@@ -2343,7 +2350,8 @@ static int musb_cleanup_urb(struct urb *urb, struct musb_qh *qh)
 		if (is_dma_capable() && dma)
 			musb_platform_clear_ep_rxintr(musb, ep->epnum);
 	} else if (ep->epnum) {
-		musb_h_tx_flush_fifo(ep);
+		musb_h_tx_flush_fifo(ep,
+				     urb->dev->state == USB_STATE_NOTATTACHED);
 		csr = musb_readw(epio, MUSB_TXCSR);
 		csr &= ~(MUSB_TXCSR_AUTOSET
 			| MUSB_TXCSR_DMAENAB
