@@ -12,6 +12,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/suspend.h>
 #include <linux/skbuff.h>
 #include <linux/slab.h>
 
@@ -82,6 +83,46 @@ struct sc23xx_sdio {
  */
 static struct sc23xx_sdio *sc23xx_sdio_priv;
 
+/*
+ * System suspend freezes tasks before devices suspend and thaws them after
+ * devices resume, and sdiohal's TX thread is freezable: a command queued on
+ * the buffered path in that window is not written until the thaw. The
+ * power_notify suspend handshake timed out (-110), so every suspend was
+ * refused, and cfg80211's disconnect on wiphy suspend went out stale after
+ * resume and upset the firmware.
+ *
+ * pm_window (PM_SUSPEND_PREPARE .. PM_POST_SUSPEND): send commands on the
+ * direct path, which writes synchronously from the caller.
+ * bus_down (from a successful suspend handshake to the resume one): the bus
+ * is or is about to be suspended - a direct write would block in
+ * sdiohal_resume_check() until resume - so fail commands at once. It is set
+ * while sdiohal_suspend() still waits on power_notify, and commands hold
+ * cmd_lock as the handshake does, so none is in flight past that point.
+ */
+static bool sc23xx_sdio_pm_window;
+static bool sc23xx_sdio_bus_down;
+
+static int sc23xx_sdio_pm_notify(struct notifier_block *nb,
+				 unsigned long action, void *data)
+{
+	switch (action) {
+	case PM_SUSPEND_PREPARE:
+	case PM_HIBERNATION_PREPARE:
+		WRITE_ONCE(sc23xx_sdio_pm_window, true);
+		break;
+	case PM_POST_SUSPEND:
+	case PM_POST_HIBERNATION:
+		WRITE_ONCE(sc23xx_sdio_pm_window, false);
+		break;
+	}
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block sc23xx_sdio_pm_nb = {
+	.notifier_call = sc23xx_sdio_pm_notify,
+};
+
 static int sc23xx_sdio_tx(int chn, const void *data, u16 len, bool direct)
 {
 	struct mbuf_t *head = NULL, *tail = NULL;
@@ -135,8 +176,11 @@ static int sc23xx_sdio_tx(int chn, const void *data, u16 len, bool direct)
 
 static int sc23xx_sdio_tx_cmd(struct sc23xx_dev *sdev, struct sk_buff *skb)
 {
+	if (READ_ONCE(sc23xx_sdio_bus_down))
+		return -EBUSY;
+
 	return sc23xx_sdio_tx(SC23XX_SDIO_TX_CMD_PORT, skb->data, skb->len,
-			      false);
+			      READ_ONCE(sc23xx_sdio_pm_window));
 }
 
 /*
@@ -415,7 +459,11 @@ static int sc23xx_sdio_power_notify(int chn, int notify)
 	if (!priv)
 		return 0;
 
+	if (!suspend)
+		WRITE_ONCE(sc23xx_sdio_bus_down, false);
 	ret = sc23xx_set_suspend(&priv->sdev, suspend);
+	if (suspend && !ret)
+		WRITE_ONCE(sc23xx_sdio_bus_down, true);
 	if (ret)
 		dev_warn(&priv->pdev->dev,
 			 "chn %d %s handshake failed: %d\n", chn,
@@ -512,6 +560,7 @@ static int sc23xx_sdio_probe(struct platform_device *pdev)
 	priv->sdev.use_dma = false;
 	platform_set_drvdata(pdev, priv);
 	sc23xx_sdio_priv = priv;
+	register_pm_notifier(&sc23xx_sdio_pm_nb);
 
 	skb_queue_head_init(&priv->data_txq);
 	init_waitqueue_head(&priv->data_tx_wait);
@@ -573,6 +622,7 @@ err_chn_deinit:
 err_free:
 	if (priv->data_tx_thread)
 		kthread_stop(priv->data_tx_thread);
+	unregister_pm_notifier(&sc23xx_sdio_pm_nb);
 	sc23xx_sdio_priv = NULL;
 	sc23xx_free_device(&priv->sdev);
 	return ret;
@@ -586,6 +636,7 @@ static void sc23xx_sdio_remove(struct platform_device *pdev)
 	stop_marlin(MARLIN_WIFI);
 	sc23xx_sdio_chn_deinit();
 	kthread_stop(priv->data_tx_thread);
+	unregister_pm_notifier(&sc23xx_sdio_pm_nb);
 	sc23xx_sdio_priv = NULL;
 	sc23xx_free_device(&priv->sdev);
 }
