@@ -344,19 +344,23 @@ static int sc27xx_fgu_get_boot_capacity(struct sc27xx_fgu_data *data, int *cap)
 	 * use the capacity value calculated above.
 	 */
 	if (!is_first_poweron) {
-		ret = sc27xx_fgu_read_last_cap(data, cap);
+		int saved;
+
+		ret = sc27xx_fgu_read_last_cap(data, &saved);
 		if (ret)
 			return ret;
 
 		/*
-		 * Limit the saved capacity to a reasonable range based on
-		 * the calculated estimate. This is needed because the saved
-		 * value may be outdated.
+		 * The saved capacity carries a quick reboot across, where it is
+		 * the better number. After charging in the bootloader's charge
+		 * screen or a long time off it is stale, and clamping it to
+		 * within 5% of the estimate still booted at 91% with a battery
+		 * the charge screen showed at 98%: keep it only while it agrees
+		 * with the estimate, else take the estimate.
 		 */
-		if (*cap < ocv_cap - 5)
-			*cap = ocv_cap - 5;
-		else if (*cap > ocv_cap + 5)
-			*cap = ocv_cap + 5;
+		*cap = abs(saved - ocv_cap) <= 3 ? saved : ocv_cap;
+		dev_info(data->dev, "boot capacity %d%% (saved %d%%, ocv %d mV -> %d%%)\n",
+			 *cap, saved, ocv / 1000, ocv_cap);
 	} else {
 		*cap = ocv_cap;
 	}
