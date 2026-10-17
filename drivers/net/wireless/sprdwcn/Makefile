@@ -5,12 +5,12 @@
 # integrated-chip boot (wcn_integrate*), SIPC and PCIe transports removed.
 #
 subdir-ccflags-y := \
-	-I $(srctree)/$(src)/include \
-	-I $(srctree)/$(src)/boot \
-	-I $(srctree)/$(src)/platform \
-	-I $(srctree)/$(src)/platform/rf \
-	-I $(srctree)/$(src)/platform/gnss \
-	-I $(srctree)/$(src)/sleep
+	-I $(src)/include \
+	-I $(src)/boot \
+	-I $(src)/platform \
+	-I $(src)/platform/rf \
+	-I $(src)/platform/gnss \
+	-I $(src)/sleep
 
 obj-$(CONFIG_UNISOC_WCN_BSP) += wcn_bsp.o
 
