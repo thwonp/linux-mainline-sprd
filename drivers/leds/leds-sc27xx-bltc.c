@@ -256,6 +256,8 @@ static int sc27xx_led_register(struct device *dev, struct sc27xx_led_priv *priv)
 		led->line = i;
 		led->priv = priv;
 		led->ldev.brightness_set_blocking = sc27xx_led_set;
+		/* off in system suspend, like every other device's LED */
+		led->ldev.flags |= LED_CORE_SUSPENDRESUME;
 		led->ldev.pattern_set = sc27xx_led_pattern_set;
 		led->ldev.pattern_clear = sc27xx_led_pattern_clear;
 		led->ldev.default_trigger = "pattern";
