@@ -11,6 +11,7 @@
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/regulator/consumer.h>
+#include <linux/suspend.h>
 #include <linux/usb/role.h>
 #include "musb_core.h"
 #include "sprd_dma.h"
@@ -23,6 +24,8 @@ struct sprd_glue {
 	struct clk *clk;
 	enum usb_role role;
 	enum usb_role role_suspended;
+	enum usb_role role_pm;		/* host role dropped for system suspend */
+	struct notifier_block pm_nb;
 	struct usb_role_switch *role_sw;
 	struct regulator *vbus;
 };
@@ -155,6 +158,37 @@ static int sprd_otg_switch_init(struct sprd_glue *glue)
 static void sprd_otg_switch_exit(struct sprd_glue *glue)
 {
 	return usb_role_switch_unregister(glue->role_sw);
+}
+
+/*
+ * The host role has to be gone before the attached devices and the root hub
+ * suspend, not only by the time this glue's own suspend runs after them: with
+ * a device on the port musb_bus_suspend() refuses ("trying to suspend as
+ * a_idle while active", -EBUSY), and with a USB DAC attached the system hung
+ * in suspend. Drop it while tasks still run, so usbcore sees an ordinary
+ * unplug, and put it back once they run again; the device enumerates afresh.
+ */
+static int sprd_musb_pm_notify(struct notifier_block *nb, unsigned long action,
+			       void *data)
+{
+	struct sprd_glue *glue = container_of(nb, struct sprd_glue, pm_nb);
+
+	switch (action) {
+	case PM_SUSPEND_PREPARE:
+		if (glue->musb && glue->role == USB_ROLE_HOST) {
+			glue->role_pm = USB_ROLE_HOST;
+			sprd_otg_switch_set(glue, USB_ROLE_NONE);
+		}
+		break;
+	case PM_POST_SUSPEND:
+		if (glue->role_pm == USB_ROLE_HOST) {
+			glue->role_pm = USB_ROLE_NONE;
+			sprd_otg_switch_set(glue, USB_ROLE_HOST);
+		}
+		break;
+	}
+
+	return NOTIFY_DONE;
 }
 
 static irqreturn_t sprd_musb_interrupt(int irq, void *__hci)
@@ -389,6 +423,9 @@ static int sprd_musb_probe(struct platform_device *pdev)
 		goto err_device_register;
 	}
 
+	glue->pm_nb.notifier_call = sprd_musb_pm_notify;
+	register_pm_notifier(&glue->pm_nb);
+
 	return 0;
 
 err_device_register:
@@ -401,6 +438,7 @@ static void sprd_musb_remove(struct platform_device *pdev)
 {
 	struct sprd_glue *glue = platform_get_drvdata(pdev);
 
+	unregister_pm_notifier(&glue->pm_nb);
 	platform_device_unregister(glue->musb_pdev);
 }
 
