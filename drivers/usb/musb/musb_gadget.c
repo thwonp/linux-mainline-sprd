@@ -1301,7 +1301,7 @@ static int musb_gadget_dequeue(struct usb_ep *ep, struct usb_request *request)
 			break;
 	}
 	if (r != req) {
-		dev_err(musb->controller, "request %p not queued to %s\n",
+		dev_dbg(musb->controller, "request %p not queued to %s\n",
 				request, ep->name);
 		status = -EINVAL;
 		goto done;

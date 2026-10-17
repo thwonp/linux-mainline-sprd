@@ -2305,8 +2305,8 @@
 
 				trips {
 					cputop0_alert0: trip-point0 {
-						temperature = <70000>;
-						hysteresis = <1000>;
+						temperature = <85000>;
+						hysteresis = <2000>;
 						type = "passive";
 					};
 
@@ -2340,8 +2340,8 @@
 
 				trips {
 					cpu0_alert0: trip-point0 {
-						temperature = <70000>;
-						hysteresis = <1000>;
+						temperature = <85000>;
+						hysteresis = <2000>;
 						type = "passive";
 					};
 
@@ -2369,8 +2369,8 @@
 
 				trips {
 					cpu1_alert0: trip-point0 {
-						temperature = <70000>;
-						hysteresis = <1000>;
+						temperature = <85000>;
+						hysteresis = <2000>;
 						type = "passive";
 					};
 
@@ -2398,8 +2398,8 @@
 
 				trips {
 					cpu2_alert0: trip-point0 {
-						temperature = <70000>;
-						hysteresis = <1000>;
+						temperature = <85000>;
+						hysteresis = <2000>;
 						type = "passive";
 					};
 
@@ -2427,8 +2427,8 @@
 
 				trips {
 					cpu7_alert0: trip-point0 {
-						temperature = <70000>;
-						hysteresis = <1000>;
+						temperature = <85000>;
+						hysteresis = <2000>;
 						type = "passive";
 					};
 
@@ -2456,8 +2456,8 @@
 
 				trips {
 					cputop1_alert0: trip-point0 {
-						temperature = <70000>;
-						hysteresis = <1000>;
+						temperature = <85000>;
+						hysteresis = <2000>;
 						type = "passive";
 					};
 
@@ -2486,8 +2486,8 @@
 
 				trips {
 					gpu_alert0: trip-point0 {
-						temperature = <70000>;
-						hysteresis = <1000>;
+						temperature = <85000>;
+						hysteresis = <2000>;
 						type = "passive";
 					};
 
@@ -2524,8 +2524,8 @@
 
 				trips {
 					cpu3_alert0: trip-point0 {
-						temperature = <70000>;
-						hysteresis = <1000>;
+						temperature = <85000>;
+						hysteresis = <2000>;
 						type = "passive";
 					};
 
@@ -2553,8 +2553,8 @@
 
 				trips {
 					cpu4_alert0: trip-point0 {
-						temperature = <70000>;
-						hysteresis = <1000>;
+						temperature = <85000>;
+						hysteresis = <2000>;
 						type = "passive";
 					};
 
@@ -2582,8 +2582,8 @@
 
 				trips {
 					cpu5_alert0: trip-point0 {
-						temperature = <70000>;
-						hysteresis = <1000>;
+						temperature = <85000>;
+						hysteresis = <2000>;
 						type = "passive";
 					};
 
@@ -2611,8 +2611,8 @@
 
 				trips {
 					cpu6_alert0: trip-point0 {
-						temperature = <70000>;
-						hysteresis = <1000>;
+						temperature = <85000>;
+						hysteresis = <2000>;
 						type = "passive";
 					};
 
