@@ -868,8 +868,20 @@ static int bq2415x_vbus_enable(struct regulator_dev *rdev)
 static int bq2415x_vbus_disable(struct regulator_dev *rdev)
 {
 	struct bq2415x_device *bq = rdev_get_drvdata(rdev);
+	int ret;
 
-	return bq2415x_set_mode(bq, BQ2415X_MODE_OFF);
+	/*
+	 * Back to charging, not BQ2415X_MODE_OFF: that also disables the
+	 * charger, and without automode nothing enables it again, so the
+	 * device stopped charging after its first USB host session until a
+	 * reboot. The probe defaults are what it charged with before boost.
+	 */
+	ret = bq2415x_set_defaults(bq);
+	if (ret < 0)
+		return ret;
+	bq->mode = BQ2415X_MODE_NONE;
+
+	return 0;
 }
 
 static int bq2415x_vbus_is_enabled(struct regulator_dev *rdev)
