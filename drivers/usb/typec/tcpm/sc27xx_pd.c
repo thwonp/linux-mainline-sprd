@@ -349,49 +349,11 @@ static int sc27xx_pd_disable_clk(struct sc27xx_pd *pd)
 				 SC27XX_CLK_PD_EN);
 }
 
-static int sc27xx_pd_start_drp_toggling(struct tcpc_dev *tcpc,
-					enum typec_port_type port_type,
-					enum typec_cc_status cc)
+/* Caller holds pd->lock. */
+static int sc27xx_pd_apply_cc(struct sc27xx_pd *pd, enum typec_cc_status cc)
 {
-	struct sc27xx_pd *pd = tcpc_to_sc27xx_pd(tcpc);
-	enum sc27xx_typec_mode mode;
-	int ret;
-
-	mutex_lock(&pd->lock);
-
-	switch (port_type) {
-	case TYPEC_PORT_SRC:
-		mode = SC27XX_MODE_SRC;
-		break;
-	case TYPEC_PORT_SNK:
-		mode = SC27XX_MODE_SNK;
-		break;
-	case TYPEC_PORT_DRP:
-		mode = SC27XX_MODE_DRP;
-		break;
-	}
-
-	ret = regmap_update_bits(pd->regmap, pd->typec_base + SC27XX_TYPEC_MODE,
-				 SC27XX_TYPEC_MODE_MASK, mode);
-
-	/* make sure already connected cables are detected */
-	if (!pd->detect_pending) {
-		pd->detect_pending = true;
-		schedule_work(&pd->typec_detect_work);
-	}
-
-	mutex_unlock(&pd->lock);
-
-	return ret;
-}
-
-static int sc27xx_pd_set_cc(struct tcpc_dev *tcpc, enum typec_cc_status cc)
-{
-	struct sc27xx_pd *pd = tcpc_to_sc27xx_pd(tcpc);
 	u32 cfg, rp_level;
 	int ret;
-
-	mutex_lock(&pd->lock);
 
 	switch (cc) {
 	case TYPEC_CC_RD:
@@ -420,13 +382,66 @@ static int sc27xx_pd_set_cc(struct tcpc_dev *tcpc, enum typec_cc_status cc)
 				 SC27XX_TYPEC_RP_LEVEL_MASK,
 				 SC27XX_TYPEC_RP_LEVEL(rp_level));
 	if (ret < 0)
-		goto out;
+		return ret;
 
-	ret = regmap_update_bits(pd->regmap, pd->typec_base + SC27XX_TYPEC_EN,
-				 SC27XX_TYPEC_TRY_SINK_EN | SC27XX_TYPEC_TRY_SRC_EN,
-				 cfg);
+	return regmap_update_bits(pd->regmap, pd->typec_base + SC27XX_TYPEC_EN,
+				  SC27XX_TYPEC_TRY_SINK_EN | SC27XX_TYPEC_TRY_SRC_EN,
+				  cfg);
+}
 
-out:
+static int sc27xx_pd_start_drp_toggling(struct tcpc_dev *tcpc,
+					enum typec_port_type port_type,
+					enum typec_cc_status cc)
+{
+	struct sc27xx_pd *pd = tcpc_to_sc27xx_pd(tcpc);
+	enum sc27xx_typec_mode mode;
+	int ret;
+
+	mutex_lock(&pd->lock);
+
+	switch (port_type) {
+	case TYPEC_PORT_SRC:
+		mode = SC27XX_MODE_SRC;
+		break;
+	case TYPEC_PORT_SNK:
+		mode = SC27XX_MODE_SNK;
+		break;
+	case TYPEC_PORT_DRP:
+		mode = SC27XX_MODE_DRP;
+		break;
+	}
+
+	ret = regmap_update_bits(pd->regmap, pd->typec_base + SC27XX_TYPEC_MODE,
+				 SC27XX_TYPEC_MODE_MASK, mode);
+	/*
+	 * The hardware runs Try.SNK/Try.SRC itself from the TYPEC_EN bits that
+	 * set_cc() programs. Toggling restarts with the cc TCPM asks for (Rd
+	 * for this try-sink port); ignoring it kept TRY_SRC_EN from the last
+	 * time the port sourced (a USB DAC), so a dual-role charger - a PC's
+	 * USB-C port - then became the sink and the device powered it instead
+	 * of charging.
+	 */
+	if (!ret)
+		ret = sc27xx_pd_apply_cc(pd, cc);
+
+	/* make sure already connected cables are detected */
+	if (!pd->detect_pending) {
+		pd->detect_pending = true;
+		schedule_work(&pd->typec_detect_work);
+	}
+
+	mutex_unlock(&pd->lock);
+
+	return ret;
+}
+
+static int sc27xx_pd_set_cc(struct tcpc_dev *tcpc, enum typec_cc_status cc)
+{
+	struct sc27xx_pd *pd = tcpc_to_sc27xx_pd(tcpc);
+	int ret;
+
+	mutex_lock(&pd->lock);
+	ret = sc27xx_pd_apply_cc(pd, cc);
 	mutex_unlock(&pd->lock);
 
 	return ret;
