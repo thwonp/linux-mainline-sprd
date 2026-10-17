@@ -276,6 +276,29 @@ err:
 	return PTR_ERR(skb);
 }
 
+/*
+ * {0, 9, 0} is the 0xfca1 enable with 0: the firmware ends its BT thread and
+ * raises BT_CLOSE, which stop_marlin()'s memory power-down waits for. Nothing
+ * asked for it before, so every power-off waited out a 30 s timeout holding
+ * the WCN power lock (a power-on right after it hung that long) and left the
+ * BT RAM powered.
+ */
+static int btsprdsdio_shutdown(struct hci_dev *hdev)
+{
+	const u8 disable_cmd[] = { 0, 9, 0 };
+	struct sk_buff *skb;
+
+	skb = __hci_cmd_sync(hdev, 0xfca1, sizeof(disable_cmd), disable_cmd,
+			     HCI_INIT_TIMEOUT);
+	if (IS_ERR(skb)) {
+		bt_dev_err(hdev, "disable failed (%ld)", PTR_ERR(skb));
+		return PTR_ERR(skb);
+	}
+	kfree_skb(skb);
+
+	return 0;
+}
+
 static struct mchn_ops_t bt_rx_ops = {
 	.channel = BT_RX_CHANNEL,
 	.hif_type = HW_TYPE_SDIO,
@@ -443,11 +466,16 @@ static int btsprdsdio_probe(struct platform_device *pdev)
 	hdev->close = btsprdsdio_close;
 	hdev->send = btsprdsdio_send;
 	hdev->set_bdaddr = btsprdsdio_set_bdaddr;
+	hdev->shutdown = btsprdsdio_shutdown;
 
 	/* We stamp a valid public_addr below; this quirk makes the core call
 	 * set_bdaddr() (running the pskey init) and mark hci0 configured.
 	 */
 	hci_set_quirk(hdev, HCI_QUIRK_INVALID_BDADDR);
+	/* shutdown() unloads the firmware's BT side, so every power-on needs
+	 * the pskey init again, not only the first.
+	 */
+	hci_set_quirk(hdev, HCI_QUIRK_NON_PERSISTENT_SETUP);
 
 	ret = btsprdsdio_setup_bdaddr(hdev, &pdev->dev);
 	if (ret)
