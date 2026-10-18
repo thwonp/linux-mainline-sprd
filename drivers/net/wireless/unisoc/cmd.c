@@ -611,14 +611,9 @@ int sc23xx_cmd_scan(struct sc23xx_vif *vif,
 	for (i = 0; i < request->n_ssids; i++)
 		ssids_len += 1 + request->ssids[i].ssid_len;
 
-	req_size = sizeof(*req) + ssids_len + 2 * (1 + n_chns_5g);
-
-	skb = sc23xx_cmd_alloc_skb(CMD_SCAN, req_size, vif->idx);
-	if (!skb)
-		return -ENOMEM;
-
-	req = skb_put(skb, sizeof(*req));
-
+	/* Count the 5 GHz channels before sizing the command: the header
+	 * length must cover the channel list the firmware reads after the
+	 * SSIDs. */
 	for (i = 0; i < request->n_channels; i++) {
 		u16 ch_idx = request->channels[i]->hw_value;
 
@@ -627,6 +622,14 @@ int sc23xx_cmd_scan(struct sc23xx_vif *vif,
 		else if (n_chns_5g < ARRAY_SIZE(chns_5g))
 			chns_5g[n_chns_5g++] = ch_idx;
 	}
+
+	req_size = sizeof(*req) + ssids_len + 2 * (1 + n_chns_5g);
+
+	skb = sc23xx_cmd_alloc_skb(CMD_SCAN, req_size, vif->idx);
+	if (!skb)
+		return -ENOMEM;
+
+	req = skb_put(skb, sizeof(*req));
 
 	req->channel_mask = cpu_to_le32(chn_2g_mask);
 	req->abort = cpu_to_le32(0);
