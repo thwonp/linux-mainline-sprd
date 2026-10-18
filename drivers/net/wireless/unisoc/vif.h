@@ -46,6 +46,7 @@ struct sc23xx_vif {
 	struct mutex scan_lock;
 
 	struct work_struct mc_work;
+	struct delayed_work reset_work;
 
 	enum sc23xx_connect_state state;
 	u8 bssid[ETH_ALEN];
