@@ -252,6 +252,7 @@ static int sc23xx_del_virtual_intf(struct wiphy *wiphy, struct wireless_dev *wde
 	synchronize_srcu(&sdev->vif_srcu);
 
 	cancel_work_sync(&vif->mc_work);
+	cancel_delayed_work_sync(&vif->reset_work);
 
 	cfg80211_unregister_wdev(wdev);
 
@@ -700,6 +701,7 @@ void sc23xx_unregister_device(struct sc23xx_dev *sdev)
 		mutex_unlock(&sdev->vif_lock);
 		if (vif) {
 			synchronize_srcu(&sdev->vif_srcu);
+			cancel_delayed_work_sync(&vif->reset_work);
 			cfg80211_unregister_wdev(&vif->wdev);
 		}
 	}

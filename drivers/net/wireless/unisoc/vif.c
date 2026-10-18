@@ -149,6 +149,33 @@ static int sc23xx_close(struct net_device *ndev)
 	return 0;
 }
 
+/*
+ * After some failed connects the firmware keeps rejecting every new one
+ * (status 16, auth timeout) until the interface is closed and opened again,
+ * e.g. when it missed a close. Do what "ip link set wlan0 down; up" does, so
+ * the supplicant's next attempt starts from a clean firmware state.
+ * trylock: del_virtual_intf cancels this work with RTNL held.
+ */
+static void sc23xx_reset_work(struct work_struct *work)
+{
+	struct sc23xx_vif *vif = container_of(to_delayed_work(work),
+					      struct sc23xx_vif, reset_work);
+	struct net_device *ndev = vif->wdev.netdev;
+
+	if (!rtnl_trylock()) {
+		schedule_delayed_work(&vif->reset_work, msecs_to_jiffies(10));
+		return;
+	}
+
+	if (netif_running(ndev)) {
+		netdev_info(ndev, "connect rejected by firmware, reopening\n");
+		dev_close(ndev);
+		dev_open(ndev, NULL);
+	}
+
+	rtnl_unlock();
+}
+
 static void sc23xx_multicast_work(struct work_struct *work)
 {
 	struct sc23xx_vif *vif = container_of(work, struct sc23xx_vif, mc_work);
@@ -249,6 +276,7 @@ struct sc23xx_vif *sc23xx_vif_new(struct sc23xx_dev *sdev, const char *name,
 	vif->sdev = sdev;
 
 	INIT_WORK(&vif->mc_work, sc23xx_multicast_work);
+	INIT_DELAYED_WORK(&vif->reset_work, sc23xx_reset_work);
 
 	ret = sc23xx_iftype_to_mode(iftype, &vif->mode, &vif->idx);
 	if (ret)

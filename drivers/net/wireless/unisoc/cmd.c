@@ -1218,6 +1218,7 @@ static void sc23xx_handle_connect(struct sc23xx_vif *vif, struct sk_buff *skb)
 			cfg80211_connect_result(vif->wdev.netdev, vif->bssid,
 						NULL, 0, NULL, 0, status_code,
 						GFP_KERNEL);
+			schedule_delayed_work(&vif->reset_work, 0);
 		} else if (vif->state == SC23XX_STATE_CONNECTED) {
 			cfg80211_disconnected(vif->wdev.netdev, status_code,
 					      NULL, 0, false, GFP_KERNEL);
