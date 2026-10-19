@@ -1103,8 +1103,10 @@ static void fbcon_init(struct vc_data *vc, bool init)
 
 	info = fbcon_info_from_console(vc->vc_num);
 
-	if (logo_shown < 0 && console_loglevel <= CONSOLE_LOGLEVEL_QUIET)
-		logo_shown = FBCON_LOGO_DONTSHOW;
+	/*
+	 * Upstream hides the logo on a quiet console. plorpOS boots quiet
+	 * precisely so the logo is all that shows; nologo still disables it.
+	 */
 
 	if (vc != svc || logo_shown == FBCON_LOGO_DONTSHOW ||
 	    (info->fix.type == FB_TYPE_TEXT))
