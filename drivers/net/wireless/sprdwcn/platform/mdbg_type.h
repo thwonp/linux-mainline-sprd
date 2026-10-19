@@ -44,9 +44,13 @@
 #define wcn_printk_ratelimited(inter, burst, now, fmt, ...)
 #endif
 
+/*
+ * Ring traffic reports: rate-limited to one per 12 s, but the limiter's own
+ * "callbacks suppressed" lines made it ~10 kernel lines a minute with Wi-Fi
+ * idle. pr_debug, so dynamic debug can still bring them back.
+ */
 #define wcn_pr_daterate(inter, burst, now, fmt, ...)		\
-	wcn_printk_ratelimited(inter, burst, now,		\
-			KERN_INFO pr_fmt(fmt), ##__VA_ARGS__)
+	pr_debug(fmt "\n", ##__VA_ARGS__)
 
 #define MDBG_SUCCESS		0
 #define MDBG_ERR_RING_FULL	1
