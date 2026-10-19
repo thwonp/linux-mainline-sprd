@@ -9,6 +9,7 @@
  * Copyright (C) Purism SPC 2019
  */
 
+#include <linux/backlight.h>
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
 #include <linux/hex.h>
@@ -490,6 +491,14 @@ static int generic_panel_prepare(struct drm_panel *panel)
         ctx->prepared = true;
         return 0;
     }
+
+    /*
+     * U-Boot hands over with the backlight lit. Through the reset and init
+     * below the panel shows its leftover contents (bright line garbage)
+     * until the first frame; keep it dark. drm_panel_enable() turns the
+     * backlight back on once video runs.
+     */
+    backlight_disable(ctx->panel.backlight);
 
     ret = regulator_enable(ctx->vdd);
     if (ret < 0) {
