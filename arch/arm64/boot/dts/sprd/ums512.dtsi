@@ -2660,6 +2660,8 @@
 			iommu_disp: iommu@20300800 {
 				compatible = "sprd,ums512-iommu", "sprd,iommu-v1";
 				reg = <0x20300800 0x80>;
+				/* lives in the DPU block, behind its APB gate */
+				clocks = <&apahb_gate CLK_DISPC_EB>;
 				sprd,iova-range = <0x90000000 0x10000000>;
 				#iommu-cells = <0>;
 				status = "disabled";
