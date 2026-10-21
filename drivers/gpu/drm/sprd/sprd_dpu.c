@@ -56,6 +56,9 @@
 #define REG_DPI_CTRL		0x1F0
 #define REG_DPI_H_TIMING	0x1F4
 #define REG_DPI_V_TIMING	0x1F8
+#define REG_DPU_ENHANCE_CFG	0x200
+
+#define DPU_MAX_LAYERS		8
 
 /* Global control bits */
 #define BIT_DPU_RUN			BIT(0)
@@ -459,6 +462,7 @@ static void sprd_dpu_init(struct sprd_dpu *dpu)
 	struct dpu_context *ctx = &dpu->ctx;
 	u32 int_mask = 0;
 	u32 dpu_version;
+	int i;
 
 	/* clear the bootloader's pinned state so our config can latch */
 	sprd_dpu_reset(ctx);
@@ -471,6 +475,16 @@ static void sprd_dpu_init(struct sprd_dpu *dpu)
 	 * complete a frame (reg update done timeout, underflow, black screen).
 	 */
 	sprd_dpi_init(dpu);
+
+	/*
+	 * After AP_SYS deep sleep the DPU powers up with random register
+	 * contents that the soft reset does not clear: stray enabled layers
+	 * and enhance stages (garbage LUTs) show as a colour grid. Clear them
+	 * as the vendor dpu_clean() does; planes program their own layer.
+	 */
+	for (i = 0; i < DPU_MAX_LAYERS; i++)
+		layer_reg_wr(ctx, REG_LAY_CTRL, 0, i);
+	writel(0, ctx->base + REG_DPU_ENHANCE_CFG);
 
 	dpu_version = readl(ctx->base + REG_DPU_VERSION);
 
