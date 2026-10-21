@@ -1064,6 +1064,9 @@ static int wcn_get_syscon_regmap(void)
 	regmap_np = of_find_compatible_node(NULL, NULL, "sprd,sc27xx-syscon");
 	if (!regmap_np) {
 		regmap_np = of_find_compatible_node(NULL, NULL, "sprd,ump962x-syscon");
+		/* mainline sc2730 has no syscon child; any PMIC cell gives the regmap */
+		if (!regmap_np)
+			regmap_np = of_find_compatible_node(NULL, NULL, "sprd,sc2730-efuse");
 		if (!regmap_np) {
 			pr_err("unable to get syscon node\n");
 			return -ENODEV;
