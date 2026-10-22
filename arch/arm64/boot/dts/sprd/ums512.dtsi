@@ -534,17 +534,14 @@
 		 * dma-ranges is the CM4's view of the shared DDR and matches
 		 * the second smem-info triple, 0x88000000 -> 0x18000000.
 		 *
-		 * Disabled: the SPL ships with the stock CM4_SYS_SOFT_RST TZPC
-		 * lock (CONFIG_SPL_FW_CM4_DEFER off), so the reset-release
-		 * write is silently ignored and the CM4 never runs - booting
-		 * the rproc just reports a phantom "running". A75 DVFS does
-		 * NOT need pm_sys (it is serviced by the hw-i2c DVFS channels,
-		 * see i2c-sprd-hw.c). Re-enable together with the SPL defer if
-		 * the sensor hub is ever wired up.
+		 * Needs an SPL without the stock CM4_SYS_SOFT_RST TZPC lock
+		 * (cm4_sec(); plorpOS SPL CONFIG_SPL_CM4_NS_RESET). With the
+		 * lock the reset-release write is silently ignored and the rproc
+		 * reports a phantom "running". pm_sys coordinates chip deep
+		 * sleep (PMU PUB_SYS_DEEP_SLEEP votes), so suspend needs it.
 		 */
 		pmsys@800000 {
 			compatible = "sprd,ums512-pmsys";
-			status = "disabled";
 			reg = <0x0 0x800000 0x0 0x1000>;
 			dma-ranges = <0x18000000 0x0 0x88000000 0x08000000>;
 			#address-cells = <1>;
@@ -2038,6 +2035,19 @@
 				#hwlock-cells = <1>;
 				clocks = <&aonapb_gate CLK_SPLK_EB>;
 				clock-names = "enable";
+			};
+
+			timer@50000 {
+				compatible = "sprd,sharkl5pro-timer", "sprd,sc9860-timer";
+				reg = <0x50000 0x20>;
+				interrupts = <GIC_SPI 71 IRQ_TYPE_LEVEL_HIGH>;
+				clocks = <&ext_32k>;
+			};
+
+			timer@50020 {
+				compatible = "sprd,sharkl5pro-suspend-timer", "sprd,sc9860-suspend-timer";
+				reg = <0x50020 0x20>;
+				clocks = <&ext_32k>;
 			};
 
 			/*
