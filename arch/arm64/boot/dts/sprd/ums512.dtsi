@@ -384,6 +384,8 @@
 			     <GIC_PPI 14 IRQ_TYPE_LEVEL_HIGH>, /* Physical Non-Secure PPI */
 			     <GIC_PPI 11 IRQ_TYPE_LEVEL_HIGH>, /* Virtual PPI */
 			     <GIC_PPI 10 IRQ_TYPE_LEVEL_HIGH>; /* Hipervisor PPI */
+		/* the counter runs off the 26 MHz crystal, which stops in deep sleep */
+		arm,no-tick-in-suspend;
 	};
 
 	pmu-a55 {
