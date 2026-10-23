@@ -5374,6 +5374,23 @@ static void vbc_ag_iis0_restore_route(struct vbc_codec_priv *vbc_codec)
 		wrote = true;
 		pr_info("%s: AG IIS0 route asserted (EXT_ACC_AG_SEL was %#x)\n",
 			__func__, before);
+		/*
+		 * Its twins go the same way: ag_iis1_ext_sel is the mic's route
+		 * (codec ADC IIS -> AG IIS1, set by the UCM Mic sequence), and
+		 * after the AUDCP domain powered off across a suspend the bit
+		 * was gone while the control still read "enable", so a capture
+		 * opened after the resume never moved (plorpos-3yv.74.23). Put
+		 * back what the controls last set. The _v1 fields share these
+		 * bits and are not replayed; the UCM's v1 value is 0, the
+		 * register's reset value.
+		 */
+		if (vbc_codec) {
+			int i;
+
+			for (i = AG_IIS1; i < AG_IIS_MAX; i++)
+				if (vbc_codec->ag_iis_ext_sel[i])
+					arch_audio_iis_to_audio_top_enable(i, 1);
+		}
 	} else {
 		/*
 		 * Legitimately transient: AGCP can still be asleep at probe, and
