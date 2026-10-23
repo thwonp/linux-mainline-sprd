@@ -93,10 +93,37 @@ static void sc23xx_notify_configured_ips(struct sc23xx_vif *vif,
 	}
 }
 
+/* The first open after sc23xx_close() powered the chip off. */
+static int sc23xx_power_on(struct sc23xx_dev *sdev)
+{
+	int i, ret;
+
+	if (!sdev->powered_off)
+		return 0;
+
+	ret = sdev->bus_ops->power_on(sdev);
+	if (ret) {
+		wiphy_err(sdev->wiphy, "failed to power the chip on: %d\n", ret);
+		return ret;
+	}
+
+	/* A fresh firmware: no credit granted yet, sequence from zero. */
+	atomic_set(&sdev->tx_seq, 0);
+	for (i = 0; i < SC23XX_TX_COLORS; i++)
+		atomic_set(&sdev->tx_credit[i], 0);
+	sdev->powered_off = false;
+
+	return 0;
+}
+
 static int sc23xx_open(struct net_device *ndev)
 {
 	struct sc23xx_vif *vif = netdev_priv(ndev);
 	int ret;
+
+	ret = sc23xx_power_on(vif->sdev);
+	if (ret)
+		return ret;
 
 	ret = sc23xx_cmd_open(vif, ndev->dev_addr);
 	if (ret)
@@ -143,8 +170,13 @@ static int sc23xx_close(struct net_device *ndev)
 		return ret;
 
 	clear_bit(SC23XX_FLAG_OPENED, &vif->flags);
-	if (atomic_dec_return(&vif->sdev->open_count) == 0)
+	if (atomic_dec_return(&vif->sdev->open_count) == 0) {
 		sc23xx_free_txrx_buffers(vif->sdev);
+		if (vif->sdev->bus_ops->power_off) {
+			vif->sdev->bus_ops->power_off(vif->sdev);
+			vif->sdev->powered_off = true;
+		}
+	}
 
 	return 0;
 }
@@ -382,7 +414,9 @@ int sc23xx_vif_reopen(struct sc23xx_vif *vif, enum nl80211_iftype iftype)
 		return -EINVAL;
 	}
 
-	if (!test_bit(SC23XX_FLAG_OPENED, &vif->flags)) {
+	/* Not when the chip is off: that firmware has no interface to close. */
+	if (!test_bit(SC23XX_FLAG_OPENED, &vif->flags) &&
+	    !vif->sdev->powered_off) {
 		ret = sc23xx_cmd_close(vif);
 		if (ret) {
 			mutex_unlock(&vif->sdev->vif_lock);

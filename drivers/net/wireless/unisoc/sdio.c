@@ -369,10 +369,43 @@ static void sc23xx_sdio_tx_kick(struct sc23xx_dev *sdev)
 	wake_up(&priv->data_tx_wait);
 }
 
+/*
+ * With every interface down the chip's Wi-Fi side has nothing to do, yet
+ * MARLIN_WIFI held it powered from probe to remove: ~0.8 mA of the RG
+ * Rotate's sleep current with Bluetooth off (plorpos-3yv.74.20). Release it
+ * on the last close and redo probe's power-up on the next open: the
+ * firmware is downloaded again (~1.2 s) and has forgotten the handshake.
+ * What the firmware reported at probe (sc23xx_get_fw_info) does not change
+ * and is already in the registered wiphy, so it is not asked again.
+ */
+static int sc23xx_sdio_power_on(struct sc23xx_dev *sdev)
+{
+	int ret;
+
+	ret = start_marlin(MARLIN_WIFI);
+	if (ret)
+		return ret;
+
+	ret = sc23xx_sync_version(sdev);
+	if (!ret)
+		ret = sc23xx_load_hw_param(sdev, "sprd/wifi_board_config.ini");
+	if (ret)
+		stop_marlin(MARLIN_WIFI);
+
+	return ret;
+}
+
+static void sc23xx_sdio_power_off(struct sc23xx_dev *sdev)
+{
+	stop_marlin(MARLIN_WIFI);
+}
+
 static const struct sc23xx_bus_ops sc23xx_sdio_bus_ops = {
 	.tx_cmd = sc23xx_sdio_tx_cmd,
 	.tx_data = sc23xx_sdio_tx_data,
 	.tx_kick = sc23xx_sdio_tx_kick,
+	.power_on = sc23xx_sdio_power_on,
+	.power_off = sc23xx_sdio_power_off,
 };
 
 /* TX completion: sdiohal is done with the buffers, free them. */

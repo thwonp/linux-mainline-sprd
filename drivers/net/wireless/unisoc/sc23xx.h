@@ -69,6 +69,13 @@ struct sc23xx_bus_ops {
 	 * resume. NULL for transports without credit-based flow control.
 	 */
 	void (*tx_kick)(struct sc23xx_dev *dev);
+	/*
+	 * Optional: power the chip's Wi-Fi side off while no interface is up,
+	 * and back on - with the firmware handshake probe did - before the
+	 * first one opens again. NULL keeps it powered for the device's life.
+	 */
+	int (*power_on)(struct sc23xx_dev *dev);
+	void (*power_off)(struct sc23xx_dev *dev);
 };
 
 struct sc23xx_reorder_data {
@@ -143,6 +150,7 @@ struct sc23xx_dev {
 	struct srcu_struct vif_srcu;
 	struct sc23xx_vif __rcu *vif[SC23XX_VIF_NUM];
 	atomic_t open_count;
+	bool powered_off;	/* bus_ops->power_off ran, power_on not yet */
 
 	spinlock_t sta_lock;
 	struct sc23xx_sta sta[SC23XX_STA_IDX_NUM];
