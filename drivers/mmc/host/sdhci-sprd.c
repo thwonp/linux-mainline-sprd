@@ -440,7 +440,36 @@ static void sdhci_sprd_set_power(struct sdhci_host *host, unsigned char mode,
 	}
 }
 
+/*
+ * This controller raises one more interrupt after a request ended in error:
+ * a CMD_COMPLETE after CMD52's no-response while a card scan resets an SDIO
+ * card that is not up yet, and DATA_CRC/DATA_END after a failed tuning
+ * phase. With nothing in flight sdhci_cmd_irq()/sdhci_data_irq() ignore
+ * them, each with an error line and a register dump - six per boot on the
+ * RG Rotate. Acknowledge exactly those here and say so at debug level;
+ * anything else goes on to the core as before.
+ */
+static u32 sdhci_sprd_irq(struct sdhci_host *host, u32 intmask)
+{
+	u32 late = 0;
+
+	if (host->pending_reset)
+		return intmask;
+	if (!host->cmd && (intmask & SDHCI_INT_CMD_MASK) == SDHCI_INT_RESPONSE)
+		late |= SDHCI_INT_RESPONSE;
+	if (!host->data && !host->data_cmd && !(intmask & SDHCI_INT_DATA_AVAIL) &&
+	    mmc_op_tuning(SDHCI_GET_CMD(sdhci_readw(host, SDHCI_COMMAND))))
+		late |= intmask & SDHCI_INT_DATA_MASK;
+	if (!late)
+		return intmask;
+
+	sdhci_writel(host, late, SDHCI_INT_STATUS);
+	dev_dbg(mmc_dev(host->mmc), "late interrupt 0x%08x after an error, ignored\n", late);
+	return intmask & ~late;
+}
+
 static const struct sdhci_ops sdhci_sprd_ops = {
+	.irq = sdhci_sprd_irq,
 	.read_l = sdhci_sprd_readl,
 	.write_l = sdhci_sprd_writel,
 	.write_w = sdhci_sprd_writew,
