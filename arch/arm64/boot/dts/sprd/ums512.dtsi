@@ -582,7 +582,7 @@
 					sprd,tx-buf-size = <0x180>;
 					sprd,rx-buf-size = <0xb00>;
 
-					rpmsg@0 {
+					shub: rpmsg@0 {
 						compatible = "sprd,shub";
 						reg = <0>, <0>;
 						sprd,channel-name = "shub_main";

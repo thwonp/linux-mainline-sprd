@@ -824,6 +824,16 @@
 	};
 };
 
+/*
+ * Nothing behind the sensor hub on this board, and stock drives pm_sys's
+ * channel 4 as its PM pipe (spipe_pm): the shub client has nothing to talk
+ * to, and its probe failed (-12, its endpoint looked up before the sbuf
+ * device was published).
+ */
+&shub {
+	status = "disabled";
+};
+
 &sdio0 {
 	status = "okay";
 	vmmc-supply = <&vddsdcore>;
